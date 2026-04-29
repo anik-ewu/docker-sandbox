@@ -1,0 +1,9 @@
+# Don't send these to Docker when building
+# (same idea as .gitignore, but for Docker builds)
+
+node_modules
+npm-debug.log
+.env
+.git
+.gitignore
+README.md
