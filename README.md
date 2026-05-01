@@ -333,13 +333,352 @@ What if we had 5 services? 10? That's a lot of commands with a lot of flags to r
 
 ## Phase 5: Docker Compose
 
-> 🚧 Coming next...
+**Goal:** Define your entire multi-container stack in ONE file, start everything with ONE command.
+
+### The Problem
+
+In Phase 4, starting the full stack required 3 commands with lots of flags:
+
+```bash
+docker network create tasknet
+docker run -d --network tasknet --name mongo mongo:7
+docker run -d --network tasknet --name task-api -p 3000:3000 \
+  -e MONGODB_URI=mongodb://mongo:27017/taskmanager task-manager
+```
+
+- Forget a flag? Broken.
+- Close your terminal? Re-type everything.
+- 10 services? 10+ commands with 50+ flags. Unmanageable.
+
+**Docker Compose saves all of this in a file — and runs it with one command.**
+
+### Key Concepts
+
+| Concept | What It Means |
+|---------|---------------|
+| **`docker-compose.yml`** | A YAML file that declares all your services, networks, ports, and env vars in one place |
+| **Service** | A container definition — each service becomes one running container |
+| **`build: .`** | Build an image from the Dockerfile in the specified directory (like `docker build`) |
+| **`image:`** | Use a pre-built image from Docker Hub (like `docker pull`) |
+| **`depends_on`** | Controls startup ORDER — "start mongo before api". Does NOT wait for the service to be "ready" |
+| **Auto-networking** | Compose creates a network automatically. All services are on it. Service name = hostname |
+| **Project name** | Compose uses the folder name as a prefix (e.g., `docker-sandbox_default` network) |
+
+### The docker-compose.yml — Line by Line
+
+```yaml
+services:
+
+  # --- MongoDB (uses a public image) ---
+  mongo:
+    image: mongo:7                  # Pull from Docker Hub
+    container_name: mongo           # Explicit name for clarity
+    # No "ports:" → MongoDB not exposed to host (same security as Phase 4!)
+
+  # --- Our Node.js API (builds from Dockerfile) ---
+  api:
+    build: .                        # Build from ./Dockerfile
+    container_name: task-api
+    ports:
+      - "3000:3000"                 # Host:Container port mapping
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017/taskmanager
+      #                      ↑ service name = hostname (auto DNS!)
+      - PORT=3000
+    depends_on:
+      - mongo                       # Start mongo first
+    restart: unless-stopped         # Auto-restart on crash
+```
+
+### How It Maps to What You Already Know
+
+```
+MANUAL COMMANDS (Phase 4)              →  COMPOSE EQUIVALENT
+─────────────────────────────          →  ─────────────────────
+docker network create tasknet          →  (automatic! Compose creates one)
+docker run -d --name mongo mongo:7     →  mongo: image: mongo:7
+docker run -d --name task-api \        →  api:
+  -p 3000:3000 \                       →    ports: ["3000:3000"]
+  -e MONGODB_URI=... \                 →    environment: [MONGODB_URI=...]
+  --network tasknet \                  →    (automatic! same network)
+  task-manager                         →    build: .
+```
+
+### Hands-On
+
+```bash
+# ⚠️ FIRST: Clean up any running containers from Phase 4
+docker stop task-api mongo 2>/dev/null; docker rm task-api mongo 2>/dev/null
+docker network rm tasknet 2>/dev/null
+
+# 1. Start EVERYTHING with one command
+docker compose up -d
+#               │   │
+#               │   └── Detached mode (run in background)
+#               └── Reads docker-compose.yml in current directory
+
+# 2. Watch it work!
+docker compose ps        # See all running services
+docker compose logs      # See combined logs from ALL services
+docker compose logs api  # See logs from just the api service
+
+# 3. Open http://localhost:3000 — your Task Manager is running!
+
+# 4. Stop everything
+docker compose down
+#   → Stops all containers
+#   → Removes all containers
+#   → Removes the auto-created network
+#   → Images are KEPT (instant restart next time)
+```
+
+### Compose Lifecycle Diagram
+
+```
+docker compose up -d
+        │
+        ├── 1. Creates network: docker-sandbox_default
+        │
+        ├── 2. Starts services in dependency order:
+        │       ├── mongo  (image: mongo:7 — pulls if not cached)
+        │       └── api    (build: . — builds from Dockerfile if needed)
+        │
+        └── 3. All services running ✅
+                Open http://localhost:3000
+
+docker compose down
+        │
+        ├── 1. Stops all containers
+        ├── 2. Removes all containers
+        ├── 3. Removes network
+        └── 4. Images remain (cached for next time)
+```
+
+### Essential Compose Commands
+
+```bash
+# Lifecycle
+docker compose up -d              # Start all services (background)
+docker compose down               # Stop & remove everything
+docker compose restart            # Restart all services
+docker compose restart api        # Restart just one service
+
+# Monitoring
+docker compose ps                 # Status of all services
+docker compose logs               # Combined logs (all services)
+docker compose logs -f api        # Follow (live-stream) logs for one service
+docker compose top                # Show running processes in each container
+
+# Building
+docker compose build              # Rebuild images (after code changes)
+docker compose up -d --build      # Rebuild AND restart in one command
+#                       ↑
+#        USE THIS after changing code!
+#        Without --build, Compose uses the cached image
+
+# Execute
+docker compose exec mongo mongosh       # Open MongoDB shell
+docker compose exec api sh              # Open shell in the API container
+```
+
+### Common Gotcha: Code Changes Not Showing?
+
+```bash
+# ❌ WRONG — reuses the old cached image:
+docker compose up -d
+
+# ✅ RIGHT — rebuilds the image with your latest code:
+docker compose up -d --build
+```
+
+> Compose caches the built image. If you change `server.js` but don't `--build`,
+> your old code keeps running. Always use `--build` after code changes!
+
+### What Changed (Phase 4 → Phase 5)
+
+| Phase 4 (Manual Commands) | Phase 5 (Docker Compose) |
+|---------------------------|--------------------------|
+| 3+ commands to start | `docker compose up -d` (one command) |
+| Flags memorized or scripted | Saved in `docker-compose.yml` |
+| Manual network creation | Automatic network |
+| Easy to forget a flag | Configuration is version-controlled |
+| Hard to share with team | `git clone` + `docker compose up` = done |
+
+### But There's Still a Problem...
+
+Try this:
+
+```bash
+# 1. Start everything
+docker compose up -d
+
+# 2. Add some tasks in http://localhost:3000
+
+# 3. Stop and remove everything
+docker compose down
+
+# 4. Start again
+docker compose up -d
+
+# 5. Check http://localhost:3000
+#    → 😱 All your tasks are GONE!
+```
+
+**Why?** When `docker compose down` removes the MongoDB container, all data inside it is destroyed.
+Containers are **ephemeral** (temporary) by design.
+
+**Phase 6 (Docker Volumes) solves this** — persistent data that survives container removal.
 
 ---
 
 ## Phase 6: Docker Volumes
 
-> 🚧 Coming next...
+**Goal:** Persist data so it survives container removal. No more losing your database!
+
+### The Problem
+
+We just proved it — `docker compose down` then `docker compose up -d` = all tasks gone.
+
+**Why?** Containers are **ephemeral** (temporary) by design. Everything inside a container — including MongoDB's data files — is part of the container's writable layer. Remove the container, remove the data.
+
+```
+Without Volumes:
+
+  Container (mongo)
+  ┌──────────────────────┐
+  │  /data/db/           │  ← MongoDB stores data HERE
+  │  ├── tasks.bson      │
+  │  └── indexes.bson    │
+  └──────────────────────┘
+           │
+     docker compose down
+           │
+           ▼
+     💥 Container deleted
+     💥 /data/db/ deleted
+     💥 All your tasks GONE
+```
+
+### The Solution: Named Volumes
+
+A volume is storage that lives **outside** the container, managed by Docker. Even when the container is destroyed, the volume stays.
+
+```
+With Volumes:
+
+  Volume (mongo-data)          Container (mongo)
+  ┌──────────────────┐         ┌──────────────────────┐
+  │  tasks.bson      │◄──mount──│  /data/db/  → volume │
+  │  indexes.bson    │         └──────────────────────┘
+  └──────────────────┘                  │
+        │                        docker compose down
+        │                               │
+        │                               ▼
+        │                        💥 Container deleted
+        ▼
+  ✅ Volume STILL EXISTS!
+  ✅ Data is SAFE!
+  ✅ New container re-mounts it
+```
+
+### Key Concepts
+
+| Concept | What It Means |
+|---------|---------------|
+| **Named Volume** | Docker-managed storage with a name (e.g., `mongo-data`). Best for databases. Docker handles the path |
+| **Bind Mount** | Maps a specific folder on YOUR machine into the container (e.g., `./src:/app/src`). Good for development |
+| **Anonymous Volume** | Volume with no name — hard to find, hard to reuse. Avoid these |
+| **`/data/db`** | Where MongoDB stores its data files inside the container. This path is defined by the mongo image |
+| **`docker compose down`** | Stops + removes containers and network. **Volumes are kept!** |
+| **`docker compose down -v`** | Same as above **BUT also deletes volumes.** ⚠️ Data gone! |
+
+### What We Added to docker-compose.yml
+
+```yaml
+services:
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo-data:/data/db     # ← Map named volume to MongoDB's data directory
+      #    │          │
+      #    │          └── Path INSIDE the container (where MongoDB writes data)
+      #    └── Volume NAME (declared in the volumes: section below)
+
+  api:
+    build: .
+    # ... (unchanged)
+
+volumes:
+  mongo-data:                   # ← Declare the named volume
+                                # Docker creates it automatically on first "up"
+```
+
+### Hands-On: Prove Data Survives
+
+```bash
+# 1. Start everything (volume is created automatically)
+docker compose up -d
+
+# 2. Add some tasks
+#    Open http://localhost:3000 and add tasks, OR:
+curl -X POST http://localhost:3000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"title":"This task will SURVIVE!"}'
+
+# 3. Verify the volume exists
+docker volume ls
+#    DRIVER    VOLUME NAME
+#    local     docker-sandbox_mongo-data    ← There it is!
+
+# 4. Stop and DESTROY containers
+docker compose down
+#    Containers removed ✅
+#    Network removed ✅
+#    Volumes KEPT! ✅ (no -v flag)
+
+# 5. Start again
+docker compose up -d
+
+# 6. Check — tasks are STILL THERE! 🎉
+curl http://localhost:3000/tasks
+```
+
+### ⚠️ The Dangerous Flag: `-v`
+
+```bash
+# SAFE — data preserved:
+docker compose down
+
+# DANGEROUS — data DELETED:
+docker compose down -v
+#                    ↑
+#           This removes volumes too!
+#           Only use when you WANT to wipe everything
+```
+
+### Volume Types Compared
+
+| Type | Syntax | Use Case | Who Manages Path? |
+|------|--------|----------|-------------------|
+| **Named Volume** | `mongo-data:/data/db` | Databases, persistent app data | Docker (you just use the name) |
+| **Bind Mount** | `./src:/app/src` | Live code reload during development | You (specify exact host path) |
+| **Anonymous Volume** | `/data/db` (no name) | Temporary, not recommended | Docker (random hash name) |
+
+### Volume Commands
+
+```bash
+# List all volumes
+docker volume ls
+
+# Inspect a volume (see where Docker stores it)
+docker volume inspect docker-sandbox_mongo-data
+
+# Remove a specific volume (⚠️ deletes data!)
+docker volume rm docker-sandbox_mongo-data
+
+# Remove ALL unused volumes (⚠️ dangerous!)
+docker volume prune
+```
 
 ---
 

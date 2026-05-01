@@ -1,0 +1,60 @@
+# ============================================
+# docker-compose.yml — Multi-Container Orchestration
+# ============================================
+# Phase 5: Orchestrate all services with one command
+# Phase 6: Volumes added to persist data!
+#
+# Usage:
+#   docker compose up -d        (start everything)
+#   docker compose down         (stop — data SURVIVES in volumes!)
+#   docker compose down -v      (stop — data DELETED with volumes!)
+# ============================================
+
+# --- Services: Each service = one container ---
+services:
+
+  # ---- MongoDB Service ----
+  mongo:
+    image: mongo:7                # Official MongoDB 7 from Docker Hub
+    container_name: mongo
+    volumes:
+      - mongo-data:/data/db       # ← PHASE 6: Persist MongoDB data!
+      #    │          │
+      #    │          └── WHERE MongoDB stores data INSIDE the container
+      #    │               (this is defined by the mongo image)
+      #    │
+      #    └── Named volume managed by Docker (declared below)
+      #        Lives on your Mac's filesystem, outside the container.
+      #        Survives: docker compose down, docker rm, container crashes.
+      #        Deleted ONLY by: docker compose down -v  OR  docker volume rm
+    # No "ports:" — MongoDB only reachable by other containers (Phase 4 security!)
+
+  # ---- Our Node.js API Service ----
+  api:
+    build: .                      # Build from Dockerfile in current directory
+    container_name: task-api
+    ports:
+      - "3000:3000"               # Map host:container port
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017/taskmanager
+      #              "mongo" = service name = hostname (auto DNS!)
+      - PORT=3000
+    depends_on:
+      - mongo                     # Start mongo first
+    restart: unless-stopped       # Auto-restart on crash
+
+# ============================================
+# VOLUMES — Data that lives OUTSIDE containers
+# ============================================
+# Without this: docker compose down → data GONE forever
+# With this:    docker compose down → data SAFE in volume
+#
+# Think of it like a USB drive:
+#   - The container is the computer (temporary)
+#   - The volume is the USB drive (persistent)
+#   - Even if you throw away the computer, the USB still has your files
+# ============================================
+volumes:
+  mongo-data:                     # Docker creates and manages this volume
+    # Docker stores it at: /var/lib/docker/volumes/docker-sandbox_mongo-data/
+    # You don't need to know the path — Docker handles it
