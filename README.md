@@ -14,6 +14,7 @@ Each phase introduces a new Docker concept by solving a real problem.
 - [Phase 4: Docker Networking](#phase-4-docker-networking)
 - [Phase 5: Docker Compose](#phase-5-docker-compose)
 - [Phase 6: Docker Volumes](#phase-6-docker-volumes)
+- [Phase 7: CI/CD with GitHub Actions](#phase-7-cicd-with-github-actions)
 - [Docker Commands Cheat Sheet](#docker-commands-cheat-sheet)
 
 ---
@@ -679,6 +680,70 @@ docker volume rm docker-sandbox_mongo-data
 # Remove ALL unused volumes (⚠️ dangerous!)
 docker volume prune
 ```
+
+---
+
+## Phase 7: CI/CD with GitHub Actions
+
+**Goal:** Automate the building and pushing of your Docker image every time you push code to `main`. This is the bridge between your local code and a production server.
+
+### The Problem
+
+Right now, to get a new version of your app to a server, you have to:
+1. Build the image locally (`docker build -t task-manager .`)
+2. Push it to Docker Hub manually (`docker push ...`)
+3. Go to the server, pull it, and restart containers.
+
+If you forget a step or someone else on your team pushes code, the server gets outdated.
+
+### The Solution: GitHub Actions
+
+We created a pipeline (`.github/workflows/deploy.yml`) that acts as a robot. It watches your GitHub repository. When it sees new code on the `main` branch, it automatically runs steps to build your image and push it to Docker Hub.
+
+### How it Works (The Pipeline)
+
+| Step | What it Does | Why it Matters |
+|------|--------------|----------------|
+| **Trigger** | `on: push: branches: ["main"]` | The pipeline only runs when code hits `main`, preventing half-finished feature branches from going to production. |
+| **Checkout** | `actions/checkout` | The "robot" downloads your code onto its temporary server (Ubuntu) so it has the files to build. |
+| **Login** | `docker/login-action` | Logs into Docker Hub using secrets. Without this, Docker Hub would block the upload. |
+| **Build & Push** | `docker/build-push-action` | Runs `docker build` using your `Dockerfile` and `docker push` to send the final image to the cloud. |
+
+### Hands-On: Setting up Docker Hub Secrets
+
+To make this work, GitHub needs permission to push to your Docker Hub account. We do this securely using **Secrets**.
+
+1. **Create an Access Token in Docker Hub:**
+   * Go to Docker Hub -> Account Settings -> Security -> New Access Token.
+   * Description: "GitHub Actions", Permissions: Read & Write.
+   * Copy the generated token!
+
+2. **Add Secrets to GitHub:**
+   * Go to your repository on GitHub.
+   * Click **Settings** -> **Secrets and variables** -> **Actions**.
+   * Click **New repository secret**.
+   * Add `DOCKERHUB_USERNAME` (Your Docker Hub username).
+   * Add `DOCKERHUB_TOKEN` (The token you just created).
+
+### The Final Test
+
+Once secrets are set, let's trigger the pipeline!
+
+```bash
+# 1. Check your status
+git status
+
+# 2. Add all changes (including the new .github folder)
+git add .
+
+# 3. Commit your changes
+git commit -m "feat: Add CI/CD pipeline and Phase 7 documentation"
+
+# 4. Push to main branch!
+git push origin main
+```
+
+Now, go to the **"Actions"** tab on your GitHub repository page. You will see the pipeline running automatically! Once it finishes (green checkmark), your new image will be waiting for you in Docker Hub.
 
 ---
 
