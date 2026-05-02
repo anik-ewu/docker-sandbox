@@ -709,6 +709,19 @@ We created a pipeline (`.github/workflows/deploy.yml`) that acts as a robot. It 
 | **Login** | `docker/login-action` | Logs into Docker Hub using secrets. Without this, Docker Hub would block the upload. |
 | **Build & Push** | `docker/build-push-action` | Runs `docker build` using your `Dockerfile` and `docker push` to send the final image to the cloud. |
 
+### Connecting the Dots: The Big Picture
+
+It's completely normal to feel a bit dizzy looking at all these configuration files. Here is how they all fit together:
+
+1. **The `Dockerfile` (The Packager):** This file only cares about *how to package your specific app*. It doesn't know about databases or the cloud. It just knows how to install dependencies and start your Node.js server.
+2. **The `deploy.yml` (The Delivery Truck):** This file is your Pipeline. It grabs your `Dockerfile`, uses it to package the code into an image, and drives that image to Docker Hub.
+3. **The `docker-compose.yml` (The Restaurant Manager):** This file cares about the big picture. When you want to run the app (locally or on a server), Compose says: *"I need to start MongoDB first, then I need to grab that Node image we built, and then I need to connect them."*
+
+#### "How does the pipeline know where the code is?"
+Look at the **Checkout** step (`uses: actions/checkout@v4`). When the pipeline runs, GitHub boots up a completely empty Linux server in the cloud. The checkout step essentially runs `git clone` on your repository. 
+
+Because the pipeline is triggered by you pushing code (`on: push: branches: ["main"]`), it downloads the **exact, latest version** of the code you just pushed. Then, the **Build** step looks in the folder (`context: .`), finds your `Dockerfile`, and builds the image using those fresh files!
+
 ### Hands-On: Setting up Docker Hub Secrets
 
 To make this work, GitHub needs permission to push to your Docker Hub account. We do this securely using **Secrets**.
