@@ -813,6 +813,9 @@ docker system df                 # Show Docker disk usage
 
 ```
 docker-sandbox/
+├── .github/
+│   └── workflows/
+│       └── deploy.yml      # (Phase 7) CI/CD Pipeline
 ├── public/
 │   └── index.html          # Task Manager UI
 ├── server.js               # Express API + Mongoose
@@ -824,3 +827,22 @@ docker-sandbox/
 ├── docker-compose.yml      # (Phase 5) Multi-container orchestration
 └── README.md               # This file!
 ```
+
+---
+
+## 🚀 What's Next? (Beyond the Sandbox)
+
+Congratulations! You've taken an app from a local, fragile installation all the way to an automated, containerized pipeline. You now understand the core of how modern software is packaged and distributed.
+
+So, what do you do with that Docker image sitting in Docker Hub?
+
+**Path 1: Simple Deployment (VPS / EC2)**
+The easiest way to deploy is to rent a server (like DigitalOcean or AWS EC2), SSH into it, and run `docker compose up -d`. To automate this, you can use tools like **Watchtower**, which automatically pulls new images from Docker Hub and restarts your containers whenever your GitHub Action finishes!
+
+**Path 2: Managed Container Services**
+Instead of managing a server yourself, you can hand your Docker image to services like **AWS Fargate**, **Google Cloud Run**, or **Azure Container Apps**. They take your image and run it automatically, scaling it up or down based on traffic.
+
+**Path 3: Kubernetes (K8s)**
+This is what your office project uses! Kubernetes is the ultimate container orchestrator. It doesn't build images; it *consumes* the images your pipeline just pushed to Docker Hub. If you have dozens of microservices, K8s ensures they are all running, healthy, and talking to each other across multiple servers. 
+
+*If you want to move to Kubernetes, you are completely ready, because you now understand the fundamental building block: the Container.*
