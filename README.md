@@ -15,6 +15,7 @@ Each phase introduces a new Docker concept by solving a real problem.
 - [Phase 5: Docker Compose](#phase-5-docker-compose)
 - [Phase 6: Docker Volumes](#phase-6-docker-volumes)
 - [Phase 7: CI/CD with GitHub Actions](#phase-7-cicd-with-github-actions)
+- [Phase 8: Nginx Reverse Proxy & Load Balancing](#phase-8-nginx-reverse-proxy--load-balancing)
 - [Docker Commands Cheat Sheet](#docker-commands-cheat-sheet)
 
 ---
@@ -757,6 +758,80 @@ git push origin main
 ```
 
 Now, go to the **"Actions"** tab on your GitHub repository page. You will see the pipeline running automatically! Once it finishes (green checkmark), your new image will be waiting for you in Docker Hub.
+
+---
+
+## Phase 8: Nginx Reverse Proxy & Load Balancing
+
+**Goal:** Understand how enterprise applications manage traffic by scaling your Node.js app to multiple containers and putting an Nginx Load Balancer in front of them.
+
+### What is a Reverse Proxy & Load Balancer?
+
+Imagine a restaurant:
+*   **The Chefs (Node.js API):** They do the hard work of cooking (processing data). 
+*   **The Waiter (Nginx Reverse Proxy):** Customers don't walk into the kitchen. They give their order to the waiter. The waiter takes it to the kitchen, gets the food, and brings it back. This hides the kitchen and adds security.
+*   **The Host (Load Balancer):** When the restaurant gets too busy for one chef, you hire three chefs. The host decides which chef gets the next ticket so no one is overwhelmed. Nginx does this for your web traffic!
+
+### The Architecture We Built
+
+Instead of exposing port `3000` on our single Node app, we made these changes in `docker-compose.yml`:
+1.  **Scaled the API:** We added `deploy: replicas: 3` to run THREE copies of the Node.js API container.
+2.  **Removed Exposed Ports:** We took away the `ports: ["3000:3000"]` from the API. The outside world can no longer talk directly to Node!
+3.  **Added Nginx:** We added an Nginx container that listens on port `80` (the standard web port) and proxies traffic to the APIs.
+
+```
+                  ┌──► task-api (Replica 1)
+                  │
+You ──► Nginx ────┼──► task-api (Replica 2)
+   (localhost:80) │
+                  └──► task-api (Replica 3)
+```
+
+### The Nginx Configuration (`nginx.conf`)
+
+We created a simple configuration file that tells Nginx how to find our APIs:
+
+```nginx
+http {
+    upstream api_servers {
+        # 'api' is the exact name of our service in docker-compose!
+        # Docker's internal DNS automatically routes this to all 3 replicas.
+        server api:3000;
+    }
+
+    server {
+        listen 80;
+        location / {
+            proxy_pass http://api_servers;
+        }
+    }
+}
+```
+
+### Hands-On: Test the Load Balancer
+
+Let's see it in action! 
+
+```bash
+# 1. Start the new architecture
+docker compose up -d
+
+# 2. Look at what is running!
+docker compose ps
+# Notice there are THREE task-api containers and ONE nginx container!
+
+# 3. Test the application
+# Go to http://localhost (Notice you don't need :3000 anymore because Nginx is on 80)
+# Add some tasks. It works perfectly!
+
+# 4. View the Load Balancing in action!
+docker compose logs -f api
+# Open http://localhost in your browser and refresh the page quickly several times.
+# Watch the terminal — you will see the requests being handled by different API containers!
+```
+
+### Why this is powerful
+If `task-api` replica #1 crashes, Nginx instantly notices and stops sending traffic to it. It routes all new users to replicas #2 and #3. Your users experience zero downtime. This is exactly how massive enterprise applications stay online 24/7!
 
 ---
 

@@ -29,19 +29,29 @@ services:
       #        Deleted ONLY by: docker compose down -v  OR  docker volume rm
     # No "ports:" — MongoDB only reachable by other containers (Phase 4 security!)
 
-  # ---- Our Node.js API Service ----
+  # ---- Our Node.js API Service (Scaled!) ----
   api:
     build: .                      # Build from Dockerfile in current directory
-    container_name: task-api
-    ports:
-      - "3000:3000"               # Map host:container port
+    # NOTE: Removed "container_name" so Compose can auto-name the replicas
+    # NOTE: Removed "ports" so these are NOT exposed to your Mac directly!
     environment:
       - MONGODB_URI=mongodb://mongo:27017/taskmanager
-      #              "mongo" = service name = hostname (auto DNS!)
       - PORT=3000
     depends_on:
       - mongo                     # Start mongo first
     restart: unless-stopped       # Auto-restart on crash
+    deploy:
+      replicas: 3                 # ← PHASE 8: Run 3 copies of our Node app!
+
+  # ---- Nginx Reverse Proxy & Load Balancer ----
+  nginx:
+    image: nginx:alpine           # Use lightweight Nginx image
+    ports:
+      - "80:80"                   # Expose port 80 to your Mac
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro  # Mount our config file
+    depends_on:
+      - api                       # Wait for Node apps to start
 
 # ============================================
 # VOLUMES — Data that lives OUTSIDE containers
